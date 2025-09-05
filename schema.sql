@@ -1,6 +1,6 @@
-drop table if EXISTS todos;
+drop table if exists salons;
 
-create table todos (
+create table salons (
 	id serial primary key,
-	note text not null
+	name text not null
 );

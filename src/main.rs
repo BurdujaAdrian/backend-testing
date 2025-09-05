@@ -8,31 +8,6 @@ use serde::{Deserialize, Serialize};
 use shuttle_runtime::CustomError;
 use sqlx::{Executor, FromRow, PgPool};
 
-#[get("/<id>")]
-async fn retrieve(id: i32, state: &State<MyState>) -> Result<Json<Todo>, BadRequest<String>> {
-    let todo = sqlx::query_as("SELECT * FROM todos WHERE id = $1")
-        .bind(id)
-        .fetch_one(&state.pool)
-        .await
-        .map_err(|e| BadRequest(e.to_string()))?;
-
-    Ok(Json(todo))
-}
-
-#[post("/", data = "<data>")]
-async fn add(
-    data: Json<TodoNew>,
-    state: &State<MyState>,
-) -> Result<Json<Todo>, BadRequest<String>> {
-    let todo = sqlx::query_as("INSERT INTO todos(note) VALUES ($1) RETURNING id, note")
-        .bind(&data.note)
-        .fetch_one(&state.pool)
-        .await
-        .map_err(|e| BadRequest(e.to_string()))?;
-
-    Ok(Json(todo))
-}
-
 struct MyState {
     pool: PgPool,
 }
@@ -45,19 +20,52 @@ async fn main(#[shuttle_shared_db::Postgres] pool: PgPool) -> shuttle_rocket::Sh
 
     let state = MyState { pool };
     let rocket = rocket::build()
-        .mount("/todo", routes![retrieve, add])
+        .mount("/salons", routes![salons::create, salons::fetch_id])
         .manage(state);
 
     Ok(rocket.into())
 }
 
-#[derive(Deserialize)]
-struct TodoNew {
-    pub note: String,
-}
+mod salons {
 
-#[derive(Serialize, FromRow)]
-struct Todo {
-    pub id: i32,
-    pub note: String,
+    use super::*;
+
+    #[derive(Serialize, FromRow)]
+    pub struct Salons {
+        pub id: i32,
+        pub name: String,
+    }
+
+    #[derive(Deserialize)]
+    pub struct NewSalone {
+        pub name: String,
+    }
+
+    #[post("/", data = "<data>")]
+    pub async fn create(
+        data: Json<NewSalone>,
+        state: &State<MyState>,
+    ) -> Result<Json<Salons>, BadRequest<String>> {
+        let salon = sqlx::query_as("INSERT INTO salons(name) VALUES ($1) RETURNING id,name")
+            .bind(&data.name)
+            .fetch_one(&state.pool)
+            .await
+            .map_err(|e| BadRequest(e.to_string()))?;
+
+        Ok(Json(salon))
+    }
+
+    #[get("/<id>")]
+    pub async fn fetch_id(
+        id: i32,
+        state: &State<MyState>,
+    ) -> Result<Json<Salons>, BadRequest<String>> {
+        let salone = sqlx::query_as("select * from salons where id=$1")
+            .bind(id)
+            .fetch_one(&state.pool)
+            .await
+            .map_err(|err| BadRequest(err.to_string()))?;
+
+        Ok(Json(salone))
+    }
 }
