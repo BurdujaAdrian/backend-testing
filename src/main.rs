@@ -22,7 +22,13 @@ async fn main(#[shuttle_shared_db::Postgres] pool: PgPool) -> shuttle_rocket::Sh
     let rocket = rocket::build()
         .mount(
             "/salons",
-            routes![salons::create, salons::read, salons::delete, salons::update],
+            routes![
+                salons::create,
+                salons::read,
+                salons::delete,
+                salons::update,
+                salons::replace
+            ],
         )
         .manage(state);
 
@@ -81,6 +87,17 @@ mod salons {
         todo!("Implement 1. the endpoint 2.the input data 3. The function itself")
     }
 
+    #[put("/<id>", data = "<data>")]
+    pub async fn replace(
+        id: i32,
+        data: Json<NewSalone>,
+        state: &State<MyState>,
+    ) -> Result<Json<Salons>, BadRequest<String>> {
+        let _ = id;
+        let _ = data;
+        let _ = state;
+        todo!("Implement 1. the endpoint 2.the input data 3. The function itself")
+    }
     #[delete("/<id>")]
     pub async fn delete(
         id: i32,
@@ -88,6 +105,6 @@ mod salons {
     ) -> Result<Json<Salons>, BadRequest<String>> {
         let _ = id;
         let _ = state;
-        todo!("Implement 1. the endpoint 2.the input data 3. The function itself")
+        todo!("Implement 1. the endpoint 2. The function itself")
     }
 }
