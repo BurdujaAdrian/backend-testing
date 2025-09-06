@@ -123,6 +123,13 @@ mod salons {
         pub phone: String,
         pub email: String,
     }
+
+    /* post /salons/
+     * data: {/*the fields in NewSalone*/}
+     *
+     * returns {"id":<the id of the inserted field>,"msg":<the name of the inserted field>}
+     */
+
     #[post("/", data = "<data>")]
     pub async fn create(
         data: Json<NewSalone>,
@@ -147,6 +154,10 @@ mod salons {
 
         Ok(Json(salon))
     }
+
+    /* get /salons/
+     *   returns <json list of all the entries in salons>
+     */
 
     #[get("/")]
     pub async fn list(state: &State<MyState>) -> Result<Json<Vec<Salon_QR>>, BadRequest<String>> {
@@ -174,6 +185,10 @@ mod salons {
         Ok(Json(salone_list))
     }
 
+    /* get /salons/<id>
+     * returns {<the fields in the sturct Salons as json key value pairs>}
+     */
+
     #[get("/<id>")]
     pub async fn read(
         id: String,
@@ -198,6 +213,12 @@ mod salons {
         pub phone: Option<String>,
         pub email: Option<String>,
     }
+
+    /* patch /salons/<id>
+     *  data: {<the fields of the UpdateSalone struct, they all are optional>}
+     *  returns {<the same as for create>}
+     */
+
     #[patch("/<id>", data = "<data>")]
     pub async fn update(
         id: String,
