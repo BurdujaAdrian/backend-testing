@@ -2813,6 +2813,7 @@ dependencies = [
  "serde",
  "shuttle-rocket",
  "shuttle-runtime",
+ "shuttle-service",
  "shuttle-shared-db",
  "sqlx",
  "tokio",
