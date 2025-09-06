@@ -45,6 +45,7 @@ mod salons {
 
     #[derive(Serialize, Type, Deserialize)]
     pub enum Sector {
+        none,
         buiucani,
         botanica,
     }
@@ -76,29 +77,13 @@ mod salons {
         pub createdAt: Option<String>,
         pub updatedAt: Option<String>,
     }
-    // the collumns corresponding to the response
-    #[derive(Serialize, FromRow)]
-    pub struct InsertReturnCols {
-        pub name: String,
-    }
-
-    #[derive(Deserialize)]
-    pub struct NewSalone {
-        pub ownerId: String,
-        pub name: String,
-        pub description: String,
-        pub address: String,
-        pub region: Sector,
-        pub phone: String,
-        pub email: String,
-    }
 
     pub async fn table_init(pool_ref: &PgPool) -> Result<PgQueryResult, shuttle_runtime::Error> {
         Ok(pool_ref
             .execute(
                 r#"
             do $$ begin
-                create type sector as enum ('botanica', 'buiucani');
+                create type sector as enum ('botanica', 'buiucani', 'no_sector');
             exception when duplicate_object then null;
             end $$;
             
@@ -122,6 +107,22 @@ mod salons {
             .map_err(CustomError::new)?)
     }
 
+    // the collumns corresponding to the response
+    #[derive(Serialize, FromRow)]
+    pub struct InsertReturnCols {
+        pub id: String,
+        pub msg: String,
+    }
+    #[derive(Deserialize)]
+    pub struct NewSalone {
+        pub ownerId: String,
+        pub name: String,
+        pub description: String,
+        pub address: String,
+        pub region: Sector,
+        pub phone: String,
+        pub email: String,
+    }
     #[post("/", data = "<data>")]
     pub async fn create(
         data: Json<NewSalone>,
@@ -130,7 +131,7 @@ mod salons {
         let salon = sqlx::query_as(
             r#"
         INSERT INTO salons(ownerId,name,description,address,region,phone,email,createdAt,updatedAt) 
-        VALUES ($1,$2,$3,$4,$5,$6,$7,NOW(),NOW()) returning name
+        VALUES ($1,$2,$3,$4,$5,$6,$7,NOW(),NOW()) returning id, name as msg
         "#,
         )
         .bind(&data.ownerId)
@@ -172,8 +173,12 @@ mod salons {
 
         Ok(Json(salone_list))
     }
+
     #[get("/<id>")]
-    pub async fn read(id: i32, state: &State<MyState>) -> Result<Json<Salons>, BadRequest<String>> {
+    pub async fn read(
+        id: String,
+        state: &State<MyState>,
+    ) -> Result<Json<Salons>, BadRequest<String>> {
         let salone = sqlx::query_as("select * from salons where id=$1")
             .bind(id)
             .fetch_one(&state.pool)
@@ -183,16 +188,58 @@ mod salons {
         Ok(Json(salone))
     }
 
+    #[derive(Deserialize)]
+    pub struct UpdateSalone {
+        pub ownerId: Option<String>,
+        pub name: Option<String>,
+        pub description: Option<String>,
+        pub address: Option<String>,
+        pub region: Option<Sector>,
+        pub phone: Option<String>,
+        pub email: Option<String>,
+    }
     #[patch("/<id>", data = "<data>")]
     pub async fn update(
-        id: i32,
-        data: Json<NewSalone>,
+        id: String,
+        data: Json<UpdateSalone>,
         state: &State<MyState>,
-    ) -> Result<Json<Salons>, BadRequest<String>> {
-        let _ = id;
-        let _ = data;
-        let _ = state;
-        todo!("Implement 1. the endpoint 2.the input data 3. The function itself")
+    ) -> Result<Json<InsertReturnCols>, BadRequest<String>> {
+        // TODO: Optimise this by using a string builder instead of needlesly
+        // reasigning values
+        let response = sqlx::query_as(
+            r#"
+        update salons 
+        set name = coalesce(nullif($2,''), name)
+          , ownerId = coalesce(nullif($3,''), ownerId)
+          , description =coalesce(nullif($4,''),  description)
+          , address =coalesce(nullif($5,''),  address)
+          , phone =coalesce(nullif($6,''),  phone)
+          , email =coalesce(nullif($7,''),  email)
+          , updatedAt = now()
+          , region = coalesce($8::sector, region)
+        where id = $1
+        returning id , 'update succesfull' as msg
+        "#,
+        )
+        .bind(&id)
+        .bind(&data.name)
+        .bind(&data.ownerId)
+        .bind(&data.description)
+        .bind(&data.address)
+        .bind(&data.phone)
+        .bind(&data.email)
+        .bind(&data.region)
+        .fetch_one(&state.pool)
+        .await
+        .map_err(|err| BadRequest(err.to_string()))?;
+        // let _ = sqlx::query!(
+        //     "
+        //     update salons
+        //     set
+        //     "
+        // );
+
+        Ok(Json(response))
     }
 
     #[put("/<id>", data = "<data>")]
