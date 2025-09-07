@@ -23,9 +23,9 @@ async fn main(#[shuttle_shared_db::Postgres] pool: PgPool) -> shuttle_rocket::Sh
             routes![
                 salons::create,
                 salons::read,
-                salons::delete,
                 salons::update,
-                salons::replace,
+                salons::delete_by_id,
+                // salons::replace,
                 salons::list,
             ],
         )
@@ -39,18 +39,18 @@ async fn main(#[shuttle_shared_db::Postgres] pool: PgPool) -> shuttle_rocket::Sh
 #[allow(non_camel_case_types)]
 mod salons {
 
+    use chrono::NaiveDateTime;
     use sqlx::{postgres::PgQueryResult, prelude::Type, Row};
 
     use super::*;
 
-    #[derive(Serialize, Type, Deserialize)]
+    #[derive(Debug, Serialize, Type, Deserialize)]
     pub enum Sector {
-        none,
         buiucani,
         botanica,
     }
 
-    #[derive(Serialize, FromRow)]
+    #[derive(Debug, Serialize, FromRow)]
     pub struct Salons {
         pub id: String,
         pub ownerId: String,
@@ -60,11 +60,11 @@ mod salons {
         pub region: Sector,
         pub phone: String,
         pub email: String,
-        pub createdAt: String,
-        pub updatedAt: String,
+        pub createdAt: NaiveDateTime,
+        pub updatedAt: NaiveDateTime,
     }
 
-    #[derive(Serialize, FromRow)]
+    #[derive(Debug, Serialize, FromRow)]
     pub struct Salon_QR {
         pub id: Option<String>,
         pub ownerId: Option<String>,
@@ -74,8 +74,8 @@ mod salons {
         pub region: Option<Sector>,
         pub phone: Option<String>,
         pub email: Option<String>,
-        pub createdAt: Option<String>,
-        pub updatedAt: Option<String>,
+        pub createdAt: Option<NaiveDateTime>,
+        pub updatedAt: Option<NaiveDateTime>,
     }
 
     pub async fn table_init(pool_ref: &PgPool) -> Result<PgQueryResult, shuttle_runtime::Error> {
@@ -83,7 +83,7 @@ mod salons {
             .execute(
                 r#"
             do $$ begin
-                create type sector as enum ('botanica', 'buiucani', 'no_sector');
+                create type sector as enum ('botanica', 'buiucani');
             exception when duplicate_object then null;
             end $$;
             
@@ -98,8 +98,8 @@ mod salons {
                     region sector not null,
                     phone text,
                     email text,
-                    createdAt timestamp default current_timestamp,
-                    updatedAt timestamp default current_timestamp
+                    createdAt timestamp not null default current_timestamp,
+                    updatedAt timestamp not null default current_timestamp
             );
             "#,
             )
@@ -108,12 +108,12 @@ mod salons {
     }
 
     // the collumns corresponding to the response
-    #[derive(Serialize, FromRow)]
+    #[derive(Debug, Serialize, FromRow)]
     pub struct InsertReturnCols {
         pub id: String,
         pub msg: String,
     }
-    #[derive(Deserialize)]
+    #[derive(Debug, Deserialize)]
     pub struct NewSalone {
         pub ownerId: String,
         pub name: String,
@@ -137,8 +137,8 @@ mod salons {
     ) -> Result<Json<InsertReturnCols>, BadRequest<String>> {
         let salon = sqlx::query_as(
             r#"
-        INSERT INTO salons(ownerId,name,description,address,region,phone,email,createdAt,updatedAt) 
-        VALUES ($1,$2,$3,$4,$5,$6,$7,NOW(),NOW()) returning id, name as msg
+        INSERT INTO salons(ownerId,name,description,address,region,phone,email) 
+        VALUES ($1,$2,$3,$4,$5,$6,$7) returning id, name as msg
         "#,
         )
         .bind(&data.ownerId)
@@ -168,17 +168,36 @@ mod salons {
 
         let salone_list = salone_rows
             .iter()
-            .map(|row| Salon_QR {
-                id: row.try_get("id").ok(),
-                ownerId: row.try_get("ownerId").ok(),
-                name: row.try_get("name").ok(),
-                description: row.try_get("description").ok(),
-                address: row.try_get("address").ok(),
-                region: row.try_get("region").ok(),
-                phone: row.try_get("phone").ok(),
-                email: row.try_get("email").ok(),
-                createdAt: row.try_get("createdAt").ok(),
-                updatedAt: row.try_get("updatedAt").ok(),
+            .map(|row| {
+                rocket::debug!("{:#?}", row);
+                Salon_QR {
+                    id: row.try_get(0).ok(),
+                    ownerId: row.try_get(1).ok(),
+                    name: row.try_get(2).ok(),
+                    description: row.try_get(3).ok(),
+                    address: row.try_get(4).ok(),
+                    region: row.try_get(5).ok(),
+                    phone: row.try_get(6).ok(),
+                    email: row.try_get(7).ok(),
+                    createdAt: match row.try_get::<NaiveDateTime, _>(8) {
+                        Ok(val) => Some(val),
+                        Err(err) => unreachable!("{}", err),
+                    },
+                    updatedAt: match row.try_get::<NaiveDateTime, _>(9) {
+                        Ok(val) => Some(val),
+                        Err(err) => unreachable!("{}", err),
+                    },
+                    // id: row.try_get("id").ok(),
+                    // ownerId: row.try_get("ownerid").ok(),
+                    // name: row.try_get("name").ok(),
+                    // description: row.try_get("description").ok(),
+                    // address: row.try_get("address").ok(),
+                    // region: row.try_get("region").ok(),
+                    // phone: row.try_get("phone").ok(),
+                    // email: row.try_get("email").ok(),
+                    // createdAt: row.try_get("createdat").ok(),
+                    // updatedAt: row.try_get("updatedat").ok(),
+                }
             })
             .collect::<Vec<_>>();
 
@@ -203,7 +222,7 @@ mod salons {
         Ok(Json(salone))
     }
 
-    #[derive(Deserialize)]
+    #[derive(Debug, Deserialize)]
     pub struct UpdateSalone {
         pub ownerId: Option<String>,
         pub name: Option<String>,
@@ -253,34 +272,58 @@ mod salons {
         .fetch_one(&state.pool)
         .await
         .map_err(|err| BadRequest(err.to_string()))?;
-        // let _ = sqlx::query!(
-        //     "
-        //     update salons
-        //     set
-        //     "
-        // );
 
         Ok(Json(response))
     }
 
-    #[put("/<id>", data = "<data>")]
-    pub async fn replace(
-        id: i32,
-        data: Json<NewSalone>,
-        state: &State<MyState>,
-    ) -> Result<Json<Salons>, BadRequest<String>> {
-        let _ = id;
-        let _ = data;
-        let _ = state;
-        todo!("Implement 1. the endpoint 2.the input data 3. The function itself")
-    }
+    // TODO: Implement this if a use case appears
+    //
+    // #[put("/<id>", data = "<data>")]
+    // pub async fn replace(
+    //     id: i32,
+    //     data: Json<NewSalone>,
+    //     state: &State<MyState>,
+    // ) -> Result<Json<Salons>, BadRequest<String>> {
+    //     let _ = id;
+    //     let _ = data;
+    //     let _ = state;
+    //     todo!("Implement 1. the endpoint 2.the input data 3. The function itself")
+    // }
+
     #[delete("/<id>")]
-    pub async fn delete(
-        id: i32,
+    pub async fn delete_by_id(
+        id: &str,
         state: &State<MyState>,
-    ) -> Result<Json<Salons>, BadRequest<String>> {
-        let _ = id;
-        let _ = state;
-        todo!("Implement 1. the endpoint 2. The function itself")
+    ) -> Result<Json<Option<Salons>>, BadRequest<String>> {
+        let response: Option<Salons> = sqlx::query!(
+            r#"
+        delete from salons where id = $1
+        returning id,ownerId,name,description,region::text,address,phone,email,createdAt,updatedAt
+        "#,
+            id
+        )
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(|err| BadRequest(err.to_string()))?
+        .map(|row| Salons {
+            id: row.id,
+            ownerId: row.ownerid,
+            name: row.name,
+            description: row.description.or_else(|| Some("".to_string())).unwrap(),
+            address: row.address,
+            phone: row.phone.or_else(|| Some("".to_string())).unwrap(),
+            email: row.email.or_else(|| Some("".to_string())).unwrap(),
+            createdAt: row.createdat,
+            updatedAt: row.updatedat,
+            region: match row.region.unwrap().as_str() {
+                "buiucani" => Sector::buiucani,
+                "botanica" => Sector::botanica,
+                &_ => unreachable!("everything should have been covered"),
+            },
+        });
+
+        rocket::info!("===========\nShit got deleted lol \n=========");
+        rocket::debug!("{:#?}", response);
+        Ok(Json(response))
     }
 }

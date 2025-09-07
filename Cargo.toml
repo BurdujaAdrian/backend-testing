@@ -4,14 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-diesel = { version = "2.1.0", features = ["postgres", "serde_json"] }
-diesel_migrations = "2.1.0"
-
+chrono = {version = "0.4.41", features = ["serde"]}
 rocket = {version = "0.5.0", features = ["json"]}
 serde = { version = "1.0.188", features = ["derive"] }
 shuttle-rocket = "0.56.0"
 shuttle-runtime = "0.56.0"
 shuttle-service = "0.56.0"
 shuttle-shared-db = {version = "0.56.0", features = ["postgres", "sqlx"]}
-sqlx = "0.8.6"
+sqlx = {version = "0.8.6", features = ["chrono", "postgres"]}
 tokio = "1.26.0"
